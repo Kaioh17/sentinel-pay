@@ -1,165 +1,81 @@
-## Efficient Fraud Detection Using Deep Boosting Decision Trees (DBDT)
+# SentinelPay
 
-This repository contains a from-scratch implementation of key components from:
+A transaction simulator that shows how a bank can verify and validate a payment before it goes through.
 
-**Biao Xu, Yao Wang, Xiuwu Liao, Kaidong Wang**  
-*Efficient Fraud Detection Using Deep Boosting Decision Trees* (2023)
+This is a portfolio project, not a product.
+It started as a school project that reproduced a fraud detection paper.
+It grew into a working pipeline that you can click through and watch decide.
+It does not model the real world, such as one customer using many devices.
 
-The implementation focuses on fraud detection with highly imbalanced data using:
-- Soft Decision Trees (SDT)
-- Deep Boosting Decision Trees with SGD-style optimization (DBDT-SGD)
-- Prototype DBDT-Com-style training scaffold for exploratory comparison
-- Imbalance-aware preprocessing and evaluation strategy
+## How it works
 
----
+Every transaction passes two layers.
 
-## Project Goal
+| Layer | What it does | Status |
+| --- | --- | --- |
+| 1. Deterministic rules | Checks the account, the country, and known bad IPs, devices, cards, and email domains | Done |
+| 2. Model score | Scores the fraud probability of transactions that pass Layer 1 | Planned |
 
-Reproduce and study the DBDT method for credit card fraud detection while preserving:
-- tree-like interpretability,
-- deep representation capacity,
-- robust evaluation on imbalanced data.
+Layer 1 returns `APPROVE`, `REVIEW`, or `DECLINE`, and the name of the rule that decided.
+It reads from Redis and falls back to Postgres if Redis is down.
+See [doc/deterministic-risk.md](doc/deterministic-risk.md) for the rules, the failure behavior, the mock accounts, and the trade-offs.
 
----
+Until Layer 2 exists, an `APPROVE` only means that no rule fired.
+The UI says so.
 
-## Dataset
+## Try it
 
-- **Name:** Credit Card Fraud Detection
-- **Source:** [Kaggle - mlg-ulb/creditcardfraud](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud)
-- **Access in code:** loaded with `kagglehub` in `src/preprocessing.py`
+You need Docker.
 
----
-
-## Repository Structure
-
-- `main.ipynb`  
-  Main experimental notebook (data prep, training, threshold tuning, evaluation, plots).
-
-- `src/preprocessing.py`  
-  Data loading, train/validation/test splitting, scaling, IQR filtering, SMOTE, plotting, and metrics helpers.
-
-- `src/sdt.py`  
-  Soft Decision Tree implementation:
-  - inner-node MLP routing,
-  - soft/hard forward passes,
-  - path probability computation,
-  - Xavier initialization.
-
-- `src/dbdt.py`  
-  DBDT-SGD implementation:
-  - ensemble of SDTs,
-  - exponential-loss residual fitting,
-  - local + global objective accumulation,
-  - regularization terms.
-
-- `src/pdsca.py`  
-  Experimental DBDT-Com trainer scaffold:
-  - ensemble score aggregation,
-  - minibatch training wrapper,
-  - parameter updates and test-time scoring.
-  > Note: this is a simplified prototype and **not** a full Algorithm-2 (PDSCA) implementation from the paper.
-
-- `src/baselines.py`  
-  Baseline model definitions and unified score extraction:
-  - logistic regression,
-  - random forest,
-  - MLP,
-  - optional XGBoost / LightGBM.
-
-- `src/evaluation.py`  
-  Metric and validation utilities:
-  - stratified 10-fold CV for baseline comparisons,
-  - AUC / H-measure / F1 / precision / recall summaries.
-
----
-
-## Environment Setup
-
-Python 3.10+ is recommended.
-
-Install required dependencies:
+1. Copy `.env.example` to `.env`.
+   The defaults work for local development.
+   `.env` is ignored by git, so keep real secrets there and nowhere else.
+2. Start the stack and load the mock data:
 
 ```bash
-pip install torch numpy scikit-learn imbalanced-learn matplotlib tqdm kagglehub hmeasure
+docker compose up -d --build
+docker compose exec backend python -m scripts.seed_mock
 ```
 
-If running on GPU, install a CUDA-compatible PyTorch build matching your system.
+3. Open the frontend, pick an account, pick a transaction, and read the verdict.
+   The API docs are at `http://localhost:8000/docs`.
 
----
+Pick a clean account to see the country and entity rules fire.
+Pick a frozen, restricted, or flagged account to see an account rule win.
 
-## How to Run
+Run the backend tests with `pytest backend/tests`.
 
-1. Open `main.ipynb`.
-2. Run cells top to bottom.
-3. Confirm dataset loads successfully from Kaggle.
-4. Train and evaluate `DBDT_SGD` (primary recreated pipeline).
-5. Run exploratory `DBDT-Com` prototype cells if needed.
-6. Run baseline CV summary for contextual comparison.
+## Layer 2 plan
 
----
+1. Retrain the Deep Boosting Decision Tree (DBDT) model and save its parameters to a `.pkl` file.
+2. Serve it next to the current LightGBM model.
+3. Compare the two on fraud rate and score quality.
 
-## Practical Compute Note (Important)
+The threshold sliders in the UI are for Layer 2, so they have no effect yet.
 
-The full dataset is highly imbalanced, and applying SMOTE can greatly increase training size and compute time.
+## Repository layout
 
-To keep experiments feasible and reproducible, this project supports using a **stratified subset** of the data before training:
-- preserve class ratio with stratified sampling,
-- apply SMOTE only on training data,
-- keep validation/test distribution realistic,
-- report sizes before and after SMOTE.
+| Path | Contents |
+| --- | --- |
+| `backend/` | FastAPI service: routes, Layer 1 risk checks, SQLModel tables, seed script, tests |
+| `frontend/` | React and Vite simulator UI |
+| `src/` | DBDT research code: soft decision tree, DBDT, baselines, evaluation |
+| `main.ipynb` | Experiments: preprocessing, training, threshold tuning, plots |
+| `doc/` | Layer 1 design notes and the project report |
+| `sources/`, `presentation/` | The reference paper and the slides |
 
-This is an intentional experimental constraint and should be documented in report/presentation methodology.
+## Research background
 
-The paper's reported setup uses larger dedicated hardware and full-data cross-validation. In this repository:
-- DBDT experiments are typically run with a stratified holdout protocol due to compute limits.
-- Baseline models are compared using stratified 10-fold CV.
+The model work reproduces parts of *Efficient Fraud Detection Using Deep Boosting Decision Trees* (Xu, Wang, Liao, Wang, 2023).
+It trains on the [Kaggle credit card fraud dataset](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud), which is highly imbalanced.
+The notebook uses a stratified subset, applies SMOTE to the training split only, and tunes the decision threshold on a validation split.
+It reports AUC, H-measure, F1, precision, and recall.
 
----
+`src/pdsca.py` is a simplified prototype, not the full PDSCA algorithm from the paper.
+Setup for the notebook: `pip install -r requirements.txt`, then run `main.ipynb` from top to bottom.
 
-## Current Pipeline Summary
-
-1. Load data and convert labels to `{-1, +1}`
-2. Train/test split (stratified)
-3. Train/validation split (stratified)
-4. Standardize selected numeric features
-5. Remove outliers with IQR (training set)
-6. Apply SMOTE (training set only)
-7. Train SDT/DBDT-SGD
-8. Tune decision threshold on validation set
-9. Evaluate on test set with metrics and plots
-10. (Optional) run DBDT-Com prototype and baseline CV for comparison
-
----
-
-## Metrics Used
-
-The notebook reports multiple metrics suitable for imbalanced classification:
-- AUC
-- F1-score
-- Precision
-- Recall
-- H-measure
-- Confusion matrix
-- ROC curve
-
----
-
-## Reproducibility Tips
-
-- Fix random seeds for:
-  - sampling,
-  - splits,
-  - SMOTE,
-  - PyTorch initialization.
-- Log dataset size at each stage:
-  - full/subset,
-  - train/val/test,
-  - post-IQR,
-  - post-SMOTE.
-- Record training hyperparameters (`T`, depth, hidden size, learning rate, epochs, batch size).
-
----
+The results are in [the project report](doc/Deep%20Boosting%20Decision%20Trees%20for%20Credit%20Card%20Fraud%20Detection%20(report).pdf).
 
 ## Acknowledgment
 
-This work is an educational implementation for a course project based on the referenced paper and public dataset.
+Built on the paper and the public dataset above.
