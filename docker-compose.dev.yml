@@ -1,0 +1,15 @@
+# Dev override: hot reload, source mounts, db/redis reachable from the host.
+services:
+  postgres:
+    ports: ["5433:5432"]
+  redis:
+    ports: ["6379:6379"]
+  backend:
+    volumes:
+      - ./backend:/app
+  frontend:
+    ports: !override
+      - "${FRONTEND_PORT}:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
