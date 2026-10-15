@@ -102,7 +102,7 @@ def apply_smote(X_train_clean, y_train_clean, random_state=42):
 def plot_tsne(X, y, title="t-SNE Visualization", sample_size=5000, random_state=42):
     """t-SNE visualization of class separation """
     # Sample subset for computational efficiency
-    idx = np.random.choice(len(X), size=sample_size, replace=False)
+    idx = np.random.choice(len(X), size=min(sample_size, len(X)), replace=False)
     X_sample = X[idx] if isinstance(X, np.ndarray) else X.iloc[idx].values
     y_sample = y[idx] if isinstance(y, np.ndarray) else y[idx]
     
