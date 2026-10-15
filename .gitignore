@@ -1,3 +1,25 @@
+# Secrets: real env files and keys never get committed. Only .env.example is allowed.
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+kaggle.json
+secrets/
+
+# Python
 venv
+.venv
 __pycache__
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Node
+node_modules
+dist
+
+# OS and tool junk
+.DS_Store
+*:Zone.Identifier
+*.log
